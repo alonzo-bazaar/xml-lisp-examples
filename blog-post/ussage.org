@@ -1,0 +1,231 @@
+#+property: header-args:lisp :noweb yes
+
+I'd like to begin this file by thanking https://gigamonkeys.com/book/files-and-file-io.html for existing
+
+* Goal
+With this I want to try making a small bloggish thing with the html capabilities of the xml-lisp, to see if it's in any way useable beyond "hey I made a ~h1~ header, in lisp!".
+
+I hope this will present the xml-lisp package as at least half viable for making webpages, and, with how clichè it is to use ufo technology to make yet another static blog, I hope users of more traditional web tools will feel right at home
+
+* The blog
+** Blog structure
+*** Single article
+the single blog page will have
+ - a name
+ - an author
+ - a date
+ - tags
+ - blog text
+
+*** "archives"
+the date will have
+ - year
+ - month
+ - day
+
+which will also be used to make archives for the year and the month (just lists of links to the blog of that month/year)
+
+pages to collect all instances of a blog having a certain tag will also be present, if there are more than 0 blogs tagged =cats=, there should be a page called, let's say =blog/tags/cats.html= somewhere
+
+*** url (directory) structure
+with this being a static site and all that, we don't have the luxury of reading and translating urls into instructions to do =...= at runtime.
+which means the url structure of the site will just be the directory structure of the site
+
+the url (directory) structure for the blog is here illustrated (as a sexp, becuase it works better)
+#+begin_src lisp
+  (<here be the code>
+         (blog
+          (posts
+           (2021 all-year.html
+                 (jan all-month.html
+                      post.html
+                      post.html
+                      post.html
+                      ...)
+                 (feb all-month.html
+                      post.html
+                      ...)
+                 (mar ...))
+           (2022 <same thing>)
+           (2023 <same thing>))
+          (tags (cats.html
+                 art.html
+                 computers.html
+                 ...))))
+#+end_src
+
+** Generating the blog
+generation of the whole blog revolves around generating the posts, year, month, and tag pages are all determined by the generated posts
+
+to pilot it all from post generation you could have something like
+#+begin_src lisp :tangle example.lisp
+  (in-package :tagenvs)
+  <<initialize-global-stuff>>
+  <<define-structures>>
+  <<define-generic-helper-functions>>
+  (with-html
+    <<define-rendering-helper-functions>>
+    ;; and finally
+    (defun add-blog-post (&key (title "defalt title")
+                            (date (make-date 1970 1 1))
+                            (author "default author")
+                            (tags nil)
+                            (body nil))
+      (let* ((blog-file-directory-path (blog-directory-path date))
+             (blog-file-path (file-in-directory title blog-file-directory)))
+        (ensure-directories-exist (make-blog-directory date title))
+        (add-to-year-archive date blog-file-path)
+        (add-to-year-month-archive date blog-file-path)
+        (dolist (tag tags)
+          (add-to-tag-page tag blog-file-path))
+        (render-blog-post blog-file-path
+                          :title title
+                          :author author
+                          :date date
+                          :tags tags
+                          :body body)))
+
+  <<add-blog-posts>>
+  <<render-website>> ;; blogs are already rendered, so render the archive and tag pages
+#+end_src
+
+*** Global variables
+there is one global variable we might need for this code to works somewhat decently, that is the blog root directory
+#+begin_src lisp :noweb-ref initialize-global-stuff
+  (defparameter *blog-root* (make-pathname :directory '(:relative "blog")))
+  (ensure-directories-exist *blog-root*)
+#+end_src
+
+*** Structures
+the blogs will be generated with a time, to avoid any needless access to other os facilities, and to ease testing, this timestamp will be, as of now, provided manually as a
+#+begin_src lisp :noweb-ref define-structures
+  (defstruct date year month day)
+#+end_src
+
+*** The helper functions
+**** Files
+given the above directory structure ~blog-file-directory-path~ and ~blog-file-path~ may be defined as
+
+#+begin_src lisp
+  (defun blog-directory-path (date)
+    (merge-pathnames (make-pathname
+                      :directory `(:relative
+                                   ,(princ-to-string (date-year date))
+                                   ,(princ-to-string (date-month date))))
+                     ,*blog-root*))
+
+  (defun file-in-directory (filename directory)
+    (merge-pathnames (make-pathname :name filename :type "html")
+                     directory))
+#+end_src
+
+**** Archives
+to define ~add-to-year-archive~ and ~add-to-year-month-archive~ we should first define the ~year-archive~ and ~year-month-archive~ in question
+
+the ~year-archive~ will just be a list shaped like
+#+begin_src lisp :tangle no
+  '((<year1> <article> <article> <article> ...)
+    (<year2> <article> ...)
+    (<year3> ...))
+#+end_src
+so
+#+begin_src lisp :noweb-ref initialize-global-stuff
+  (defparameter *year-articles-alist* nil)
+#+end_src
+
+the year-month-archive will be a list shaped like
+#+begin_src lisp :tangle no
+  '((<year1> ("jan" <article>*) ("feb" <article>*) ("mar" ...))
+    (<year2> ("jan" <article>*) ...)
+    ...)
+#+end_src
+
+which will too, start as
+#+begin_src lisp :noweb-ref initialize-global-stuff
+  (defparameter *year-month-articles-alist* nil)
+#+end_src
+
+given the above specifications, the functions ~add-to-year-archive~ and ~add-to-year-month-archive~ may be defined as
+#+begin_src lisp :noweb-ref define-generic-helper-functions
+  (defun add-to-year-archive (date path)
+    (let ((year-entry (assoc (date-year date) *year-articles-alist*)))
+      (if year-entry
+          (push path (cdr year-entry))
+          (push (list (date-year date) path) *year-articles-alist*))))
+
+  (defun add-to-year-month-archive (date path)
+    (let ((year (date-year date))
+          (month (date-month date))
+          (year-entry (assoc (date-year date) *year-month-articles-alist*)))
+      (unless year-entry
+        (push (list year) *year-month-articles-alist*)
+        (setf year-entry (car *year-month-articles-alist*)))
+      (let ((month-entry
+              (assoc month (cdr year-entry) :test #'string-equal)))
+        (unless month-entry
+          (push (list month) (cdr year-entry))
+          (setf month-entry (cadr year-entry)))
+        (push path (cdr month-entry)))))
+#+end_src
+
+**** Tags
+the implementation of tag pages is not much different than it has been for the year archives, a big ol' alist will do for the tag/posts association
+#+begin_src lisp :noweb-ref initialize-global-stuff
+  (defparameter *tag-articles-alist* nil)
+#+end_src
+
+and
+#+begin_src lisp :noweb-ref define-generic-helper-functions
+  (defun add-to-tag-page (tag path)
+    (let ((tag-entry (assoc tag *tag-articles-alist*)))
+      (if tag-entry
+          (push path (cdr tag-entry))
+          (push (list tag path) *tag-articles-alist*))))
+#+end_src
+
+* Rendering time
+it is now time to actually use the whole xml-lisp thing that this example was supposed to showcase
+
+we'll start with the star of the show, ~render-blog-post~
+the signature was some eons ago, to remind ourselves, the function was called like
+#+begin_src lisp
+    (render-blog-post blog-file-path :title title :author author
+                                     :date date :tags tags :body body)
+#+end_src
+
+so let us now write this function (and remember the output is in plain html, no css for now)
+#+begin_src lisp :noweb-ref define-rendering-helper-functions
+  (defun render-blog-post (filepath &key title author date tags body)
+    (html
+     (head
+      (meta :charset "utf8" :lang "en")
+      (title "some blog post"))
+     (body
+      (h1 :class "blog-title" title)
+
+      (div :class "below-the-title" :style "text-align:right"
+           (h3 "author : " author)
+           (h3 "date : " (format nil "~A/~A/~A"
+                                 (date-year date)
+                                 (date-month date)
+                                 (date-day date))))
+
+      (div :class "blog-main-body" body)
+
+      (div :class "blog-tags"
+           (ul
+            (dolist (tag tags)
+              (li (a :href (link-to-tag tag) tag))))))))
+#+end_src
+
+TODO
+make
+ - link to tag
+ - link to year
+ - link to month
+ - and see how the are they supposed to work with relative tags and all
+   
+
+
+
+
