@@ -1,0 +1,10 @@
+* Needed
+ - render the archives (easy enough)
+ - you should make a bit more sure this also works when hosted on github
+
+* Bit less needed (for now)   
+ - add a way to have permanent year/month/tag archives, maybe load them at init, maybe not
+   - though loading them at init could make for some rather interactive blog manipulation
+   - although that is a bit beyond the scope of this example
+ - add a next/prev blog (chronologically I presume) thing at the top and/or bottom of the blog posts
+ - css when

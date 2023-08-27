@@ -1,0 +1,22 @@
+<html>
+<head>
+<meta charset = "utf8"lang = "en"></meta>
+<title>some blog post</title>
+</head>
+<body>
+<h1 class = "blog-title">defalt title</h1>
+<div class = "below-the-title"style = "text-align:right">
+<h3>author : default author</h3>
+<h3>date : 1970/1/1</h3>
+</div>
+<div class = "blog-main-body">
+siccome immobile</div>
+<div class = "blog-tags">
+<ul>
+<li><a href = "file:///home/big/git/lisp/alonzo/xml-lisp-examples/blog-post/blog/tags/ei.html">ei</a></li>
+<li><a href = "file:///home/big/git/lisp/alonzo/xml-lisp-examples/blog-post/blog/tags/fu.html">fu</a></li>
+<li><a href = "file:///home/big/git/lisp/alonzo/xml-lisp-examples/blog-post/blog/tags/tarantella.html">tarantella</a></li>
+</ul>
+</div>
+</body>
+</html>
