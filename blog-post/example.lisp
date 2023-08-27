@@ -2,13 +2,15 @@
 (defparameter *year-articles-alist* nil)
 (defparameter *year-month-articles-alist* nil)
 (defparameter *tag-articles-alist* nil)
-(let ((blog-root-relative-path
-        (make-pathname :directory '(:relative "blog"))))
-      (defparameter *blog-root-absolute-path*
-          (merge-pathnames blog-root-relative-path)))
+(defparameter *blog-root-absolute-path*
+  (let ((blog-root-relative-path
+          (make-pathname :directory '(:relative "blog"))))
+    (merge-pathnames blog-root-relative-path)))
+
 ;; this does not work on windows boxes
 ;; TODO: make some (file-uri-to-path) function to address this
 ;; or whatever abstraction you can come up with at the moment
+;; defstruct uri?
 (defun blog-root-url (&key type)
   (let ((local-root-url
           (let ((blog-root-absolute-path-string
@@ -24,8 +26,15 @@
 ;; type 'remote for deployment (here deployed on github pages)
 (defparameter *blog-root-url* (blog-root-url :type 'local))
 (defparameter month-names (make-array 12 :initial-contents '("jan" "feb" "mar" "apr" "may" "jun" "jul" "aug" "sep" "oct" "nov" "dec")))
+
 (defstruct date year month day)
 (defun mkdat (a b c) (make-date :year a :month b :day c))
+
+;; optimal? no
+;; useful? HELL YEAH
+(defun cat2 (s1 s2) (format nil "~A~A" s1 s2))
+(defun catn (&rest ss) (reduce #'cat2 ss :initial-value ""))
+
 (defun add-to-year-archive (date path)
   (let ((year-entry (assoc (date-year date) *year-articles-alist*)))
     (if year-entry
@@ -51,6 +60,7 @@
     (if tag-entry
         (push path (cdr tag-entry))
         (push (list tag path) *tag-articles-alist*))))
+
 (defun link-to-tag (tag) (format nil "~Atags/~A.html" *blog-root-url* tag))
 (defun link-to-year (year) (format nil "~Aposts/~A/all-year.html" *blog-root-url* year))
 
@@ -58,6 +68,7 @@
   (format nil "~Aposts/~A/~A/all-month.html" *blog-root-url* year (month-name month)))
 (defun link-to-blog (&key year month title)
   (format nil "~Aposts/~A/~A/~A.html" *blog-root-url* year (month-name month) title))
+
 (defun month-name (number) (svref month-names (1- number)))
 
 (with-html
@@ -130,12 +141,64 @@
                    :body "siccome immobile"))
 
   (defun render-archives ()
-    (render-tag-archives)
+    (render-index)
+    (render-tag-pages)
     (render-year-archives)
-    (render-year-month-archives))
-  (defun render-tag-archives () nil)
-  (defun render-year-archives () nil)
-  (defun render-year-month-archives () nil)
+    (render-year-month-archives)
+    )
+
+  (defun render-index () nil)
+
+  ;; some dry got wet with these
+  (defun render-tag-pages ()
+    (ensure-directories-exist (format nil "~Atags/" *blog-root-absolute-path*))
+    (dolist (ta *tag-articles-alist*)
+      (let ((tag (car ta))
+            (posts (cdr ta)))
+        (render-to-file (format nil "~Atags/~A.html" *blog-root-absolute-path* tag)
+                        (base-archive :title (format nil "blogs tagged ~A" tag)
+                                      :lst (mapcar #'princ-to-string posts))))))
+        
+  (defun render-year-archives ()
+    (ensure-directories-exist (format nil "~Aposts/" *blog-root-absolute-path*))
+    (dolist (ye *year-articles-alist*)
+      (let ((year (car ye))
+            (posts (cdr ye)))
+        (ensure-directories-exist (format nil "~Aposts/~A/" *blog-root-absolute-path* year))
+        (render-to-file (format nil "~Aposts/~A/all-year.html" *blog-root-absolute-path* year)
+                        (base-archive :title (format nil "blogs in year ~A" year)
+                                      :lst (mapcar #'princ-to-string posts))))))
+  
+  ;; this function looks BAD
+  ;; REALLY BAD
+  ;; probably syntomatic of a very lassiez lister attitude towards the usage of data structures within the code at hand
+  
+  (defun render-year-month-archives ()
+    (ensure-directories-exist (cat2 *blog-root-absolute-path* "posts/"))
+    (dolist (yemo *year-month-articles-alist*)
+      (let ((year (car yemo))
+            (months (cdr yemo)))
+        (dolist (m months)
+          (let ((month (car m))
+                (posts (cdr m)))
+            (let ((month-dir (catn *blog-root-absolute-path* "posts/"
+                                   year "/" (month-name month) "/")))
+              (ensure-directories-exist month-dir)
+              (render-to-file (cat2 month-dir "all-month.html")
+                              (base-archive :title (catn "posts in month " (month-name month)
+                                                         " of year " year)
+                                            :lst (mapcar #'princ-to-string posts)))))))))
+
+  (defun base-archive (&key title lst)
+    (html
+     (head
+      (meta :charset "utf8")
+      (title title))
+     (body
+      (h1 :class "archive-head" title)
+      (ul :class "archive-list"
+          (dolist (l lst)
+            (li l))))))
   )
 
 ;; blogs are already rendered, so render the archive and tag pages

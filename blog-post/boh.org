@@ -1,0 +1,2 @@
+rendering takes paths, because files
+linking takes urls, which will hopefully match whatever the rendering did with the paths
